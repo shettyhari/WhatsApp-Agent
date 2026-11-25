@@ -19,7 +19,6 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
-ALLOWED_DOMAIN = os.environ.get("ALLOWED_EMAIL_DOMAIN", "@theebg.com").lower()
 MIN_PASSWORD_LEN = 8
 SESSION_TTL_SECONDS = 7 * 24 * 3600
 PBKDF2_ITERATIONS = 200_000
@@ -319,8 +318,6 @@ def public_user(email, rec):
 def check_new_account(data, email, password, name):
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
         raise ApiError(400, "Enter a valid email address.")
-    if ALLOWED_DOMAIN and not email.endswith(ALLOWED_DOMAIN):
-        raise ApiError(400, f"Only {ALLOWED_DOMAIN} email addresses can be used.")
     if len(password) < MIN_PASSWORD_LEN:
         raise ApiError(400, f"Password must be at least {MIN_PASSWORD_LEN} characters.")
     if not name:
@@ -419,7 +416,7 @@ class Api:
     def get(self, path, token):
         if path == "/api/bootstrap":
             data = self.storage.read()
-            return 200, {"server": "ebg-whatsapp-agent", "hasUsers": bool(data["users"]), "emailDomain": ALLOWED_DOMAIN}
+            return 200, {"server": "ebg-whatsapp-agent", "hasUsers": bool(data["users"])}
         if path == "/api/me":
             data = self.storage.read()
             ctx = self.caller(data, token)

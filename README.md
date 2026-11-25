@@ -24,8 +24,7 @@ WhatsApp Business number. Replies are written by Claude (Anthropic).
 | Create or delete agents, connect WhatsApp, turn auto-replies on or off | ✓ | |
 | Manage the team | ✓ | |
 
-The first account created on a fresh install becomes the Admin. Only `@theebg.com` emails
-are accepted (change with `ALLOWED_EMAIL_DOMAIN`).
+The first account created on a fresh install becomes the Admin. Any email address can be used.
 
 ## Run it on a PC (for training and testing)
 
@@ -57,7 +56,6 @@ WhatsApp can't reach a PC, so going live needs the Vercel setup below.
 | Variable | Default | What it does |
 |---|---|---|
 | `AGENT_MODEL` | `claude-opus-5-5` | Claude model that writes replies |
-| `ALLOWED_EMAIL_DOMAIN` | `@theebg.com` | Which emails can have accounts (empty = any) |
 | `REDIS_PREFIX` | `ebgwa` | Key prefix in Redis |
 | `WHATSAPP_GRAPH_VERSION` | `v21.0` | Meta Graph API version |
 
