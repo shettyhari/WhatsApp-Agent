@@ -24,15 +24,17 @@ import urllib.error
 import urllib.request
 
 # _core imports this module lazily, so importing from it here is safe
+import _claude
+import _files
 from _core import ApiError, Result, now_iso
 
-AGENT_MODEL = os.environ.get("AGENT_MODEL", "claude-opus-5-5")
 GRAPH_API_VERSION = os.environ.get("WHATSAPP_GRAPH_VERSION", "v21.0")
 
 MAX_AGENTS = 50
 MAX_KNOWLEDGE = 200
 MAX_EXAMPLES = 300
-MAX_KNOWLEDGE_TEXT = 20000
+MAX_KNOWLEDGE_TEXT = _files.MAX_FILE_TEXT   # characters per knowledge entry
+MAX_KNOWLEDGE_TOTAL = 400000                # characters across one agent's knowledge base
 MAX_PROFILE_TEXT = 4000
 MAX_CHATS_PER_AGENT = 200        # most recent customers kept per agent
 MAX_MESSAGES_PER_CHAT = 60       # most recent messages kept per customer
@@ -161,6 +163,14 @@ def new_agent(data, brand, created_by):
 # ---------------------------------------------------------------------------
 # Training -> prompt
 # ---------------------------------------------------------------------------
+def check_knowledge_room(items, new_text, replacing=None):
+    if replacing is None and len(items) >= MAX_KNOWLEDGE:
+        raise AgentError(400, "This agent's knowledge base is full. Merge or remove some entries.")
+    total = sum(len(k.get("content") or "") for k in items if k is not replacing) + len(new_text)
+    if total > MAX_KNOWLEDGE_TOTAL:
+        raise AgentError(400, "This agent's knowledge base is too large. Remove entries it no longer needs, or shorten long ones.")
+
+
 def build_system_prompt(data, agent):
     """The agent's instructions, built only from its training. Stable text, so it caches well."""
     p = agent.get("profile") or {}
@@ -225,34 +235,15 @@ def generate_reply(system_prompt, history):
     messages = to_model_messages(history)
     if not messages or messages[-1]["role"] != "user":
         raise AgentError(400, "There is no customer message to reply to.")
-    try:
-        import anthropic
-    except ImportError:
-        raise AgentError(503, "The Anthropic SDK is not installed on the server. Run: pip install anthropic")
-    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
-        raise AgentError(503, "ANTHROPIC_API_KEY is not set on the server, so the agent can't write replies yet (see DEPLOY.md).")
-
-    client = anthropic.Anthropic(timeout=45.0, max_retries=2)
-    try:
-        response = client.beta.messages.create(
-            model=AGENT_MODEL,
-            max_tokens=2000,
-            # If a reply is declined by the safety classifier, the API retries it on a fallback model
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
-            messages=messages,
-            output_config={"effort": "low", "format": {"type": "json_schema", "schema": REPLY_SCHEMA}},
-        )
-    except anthropic.AuthenticationError:
-        raise AgentError(503, "The Anthropic API key on the server was rejected. Check ANTHROPIC_API_KEY.")
-    except anthropic.RateLimitError:
-        raise AgentError(429, "The AI service is busy right now. Try again in a minute.")
-    except anthropic.APIStatusError as e:
-        print("[Agent] Claude API error:", e.status_code, getattr(e, "message", e))
-        raise AgentError(502, "The AI service returned an error. Try again shortly.")
-    except anthropic.APIConnectionError:
-        raise AgentError(502, "Couldn't reach the AI service. Check the server's internet connection.")
+    client = _claude.client(timeout=45.0)
+    response = _claude.run(lambda: client.beta.messages.create(
+        model=_claude.MODEL,
+        max_tokens=2000,
+        system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
+        messages=messages,
+        output_config={"effort": "low", "format": {"type": "json_schema", "schema": REPLY_SCHEMA}},
+        **_claude.FALLBACK_ARGS,
+    ), what="this message")
 
     if response.stop_reason == "refusal":
         return {"reply": "Thanks for your message! A member of our team will get back to you shortly.", "needs_human": True}
@@ -373,6 +364,8 @@ class AgentRoutes:
             return self.test_chat(token, body)
         if action == "reply":
             return self.manual_reply(token, body)
+        if action == "uploadKnowledge":
+            return self.upload_knowledge(token, body)
 
         def fn(data):
             ctx = self._admin(data, token) if action in ADMIN_ACTIONS else self._member(data, token)
@@ -409,11 +402,10 @@ class AgentRoutes:
                 raise AgentError(400, "Add some text for the agent to learn.")
             items = agent.setdefault("knowledge", [])
             item = next((k for k in items if k.get("id") == body.get("id")), None) if body.get("id") else None
+            check_knowledge_room(items, content, replacing=item)
             if item:
                 item.update(title=title or item.get("title", ""), content=content, updatedAt=_now())
             else:
-                if len(items) >= MAX_KNOWLEDGE:
-                    raise AgentError(400, "This agent's knowledge base is full. Merge or remove some entries.")
                 items.append({"id": _new_id("kn"), "title": title or "Note", "content": content,
                               "updatedAt": _now(), "addedBy": ctx.name})
         elif action == "deleteKnowledge":
@@ -464,6 +456,36 @@ class AgentRoutes:
             (data.get("agentChats") or {}).pop(agent["id"], None)
         else:
             raise AgentError(400, "Unknown agent action.")
+
+    # Attach a file: read it (outside the transaction, since that can take a while), then save the text
+    def upload_knowledge(self, token, body):
+        data = self.storage.read()
+        self._member(data, token)
+        agent_id = str(body.get("agentId") or "")
+        require_agent(data, agent_id)
+        name = _text(body.get("fileName"), 200) or "file"
+        raw = _files.decode_upload(body.get("data"))
+        text, how, cut = _files.extract(name, _text(body.get("mimeType"), 100), raw)
+        text, over = _files.limit(text)
+        if not text:
+            raise AgentError(400, f"No text could be found in {name}.")
+
+        def fn(d):
+            ctx = self._member(d, token)
+            agent = require_agent(d, agent_id)
+            items = agent.setdefault("knowledge", [])
+            check_knowledge_room(items, text)
+            entry = {"id": _new_id("kn"), "title": re.sub(r"\.[A-Za-z0-9]{1,5}$", "", name)[:120] or name[:120],
+                     "content": text, "updatedAt": _now(), "addedBy": ctx.name,
+                     "file": {"name": name, "size": len(raw), "how": how, "truncated": bool(cut or over)}}
+            items.append(entry)
+            agent["updatedAt"] = _now()
+            payload = self._view(d)
+            payload["added"] = {"id": entry["id"], "title": entry["title"], "chars": len(text),
+                                "truncated": entry["file"]["truncated"]}
+            return Result(200, payload, changed=True)
+
+        return self.api.run(fn)
 
     # Test chat: same prompt as WhatsApp, nothing is stored or sent
     def test_chat(self, token, body):

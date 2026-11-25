@@ -8,8 +8,8 @@ WhatsApp Business number. Replies are written by Claude (Anthropic).
 
 - **Agents:** one per brand. Each agent has four tabs:
   - **Train:** brand profile (what the brand does, tone, language, greeting, rules, when to
-    hand over to a person), knowledge base (FAQs, products, prices, policies; paste text or load a
-    text file) and example replies ("customer says X, reply Y").
+    hand over to a person), knowledge base (FAQs, products, prices, policies) and example replies
+    ("customer says X, reply Y").
   - **Test chat:** chat as a customer; nothing is sent on WhatsApp. **Correct this reply** saves
     your version as a new example, and the agent uses it straight away.
   - **Conversations:** real WhatsApp chats. When a customer needs a person, the agent says someone
@@ -17,6 +17,22 @@ WhatsApp Business number. Replies are written by Claude (Anthropic).
     WhatsApp from here and hand the chat back to the agent.
   - **Connect WhatsApp:** step-by-step setup with Meta's WhatsApp Cloud API.
 - **Team:** Admins add teammates (email + temporary password), change roles and remove people.
+
+### Adding files to the knowledge base
+
+In **Train → Knowledge base**, click **Attach files** or drop files onto it (several at once,
+up to 3 MB each). Each file becomes a knowledge entry you can open, check and correct.
+
+| File | How it's read |
+|---|---|
+| PDF, images (JPG, PNG, WEBP, GIF) | Claude reads them, including scans and photos of menus or price lists, and writes out the facts. Takes up to a minute or two. |
+| Word `.docx`, Excel `.xlsx`, PowerPoint `.pptx` | Text and tables are read directly. |
+| TXT, CSV, MD, JSON, HTML, XML, RTF and other text files | Read as they are. |
+
+Not supported: audio, video, archives (zip) and old `.doc`/`.xls`/`.ppt` files (save those as
+`.docx`/`.xlsx`/`.pptx` or PDF first). Only the text is stored, not the original file. Each entry
+keeps up to 50,000 characters (split longer files), and an agent's whole knowledge base up to
+400,000.
 
 | | Admin | Member |
 |---|---|---|
@@ -62,6 +78,9 @@ WhatsApp can't reach a PC, so going live needs the Vercel setup below.
 ## Good to know
 
 - WhatsApp only allows free-form replies within 24 hours of the customer's last message.
+- `vercel.json` gives each request up to 300 seconds, so long PDFs can finish reading. That needs
+  Vercel's Fluid Compute, which is on by default for new projects; if a deploy complains about the
+  duration, turn it on under *Settings → Functions*.
 - Each agent keeps its latest 200 conversations (60 messages each).
 - Incoming messages are only accepted when signed with the Meta app secret; access tokens and
   app secrets are never sent to the browser.

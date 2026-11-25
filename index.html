@@ -642,12 +642,21 @@
 
                 <div class="widget p-5 space-y-4">
                     <div><h3 class="text-base font-medium text-zinc-900 dark:text-white">2. Knowledge base</h3>
-                    <p class="text-xs text-zinc-500">Paste anything customers ask about: FAQs, product list and prices, delivery, returns, offers, store addresses. One topic per entry keeps it easy to update.</p></div>
+                    <p class="text-xs text-zinc-500">Attach files or paste text about anything customers ask: FAQs, product list and prices, delivery, returns, offers, store addresses.</p></div>
+                    <label id="agent-drop-zone" ondragover="agentDragOver(event)" ondragleave="agentDragLeave(event)" ondrop="agentDrop(event)"
+                        class="block rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-[#25D366] hover:bg-[#25D366]/5 px-4 py-5 text-center cursor-pointer transition">
+                        <input type="file" multiple class="hidden" onchange="uploadKnowledgeFiles(this.files); this.value = ''">
+                        <i data-lucide="paperclip" class="w-5 h-5 mx-auto text-zinc-400"></i>
+                        <div class="mt-1.5 text-sm font-medium text-zinc-800 dark:text-zinc-100">Attach files <span class="font-normal text-zinc-500">or drop them here</span></div>
+                        <div class="mt-0.5 text-[11px] text-zinc-500">PDF, Word, Excel, PowerPoint, images (photos of menus, price lists, scans) and text files · up to 3 MB each</div>
+                    </label>
+                    ${agentUploadsHtml(a)}
                     <div class="divide-y divide-zinc-100 dark:divide-zinc-800">
                         ${knowledge.map(k => `<div class="py-2.5 flex items-start gap-3">
-                            <i data-lucide="file-text" class="w-4 h-4 text-zinc-400 mt-0.5 shrink-0"></i>
+                            <i data-lucide="${k.file ? fileIcon(k.file.name) : 'notebook-pen'}" class="w-4 h-4 text-zinc-400 mt-0.5 shrink-0"></i>
                             <div class="flex-1 min-w-0">
                                 <div class="text-sm font-medium text-zinc-900 dark:text-white">${escapeHtml(k.title)}</div>
+                                ${k.file ? `<div class="text-[11px] text-zinc-400">${escapeHtml(k.file.name)} · ${formatBytes(k.file.size)} · ${escapeHtml(k.file.how)}${k.file.truncated ? ' · <span class="text-amber-600">only the first part was kept</span>' : ''}</div>` : ''}
                                 <div class="text-xs text-zinc-500 line-clamp-2 whitespace-pre-line">${escapeHtml(k.content.slice(0, 300))}</div>
                             </div>
                             ${iconBtn('editKnowledge', k.id, 'pencil', 'Edit', 'hover:text-indigo-600 hover:bg-zinc-100 dark:hover:bg-zinc-800')}
@@ -655,16 +664,13 @@
                         </div>`).join('') || `<p class="py-3 text-sm text-zinc-500">Nothing yet. Add the brand's FAQs or product details below.</p>`}
                     </div>
                     <form onsubmit="saveKnowledge(event)" class="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                        <div class="text-xs font-medium text-zinc-700 dark:text-zinc-300">${kEdit ? 'Edit entry' : 'Add an entry'}</div>
+                        <div class="text-xs font-medium text-zinc-700 dark:text-zinc-300">${kEdit ? 'Edit entry' : 'Or type an entry'}</div>
                         <input id="agent-kn-title" maxlength="120" value="${escapeHtml(kEdit ? kEdit.title : '')}" placeholder="Topic, e.g. Delivery & returns" class="${AGENT_INPUT_CLS}">
-                        <textarea id="agent-kn-content" rows="6" maxlength="20000" placeholder="e.g. We deliver across India in 3-5 working days. Free delivery on orders above Rs 999. Returns accepted within 7 days if unused..." class="${AGENT_INPUT_CLS}">${escapeHtml(kEdit ? kEdit.content : '')}</textarea>
+                        <textarea id="agent-kn-content" rows="${kEdit && kEdit.file ? 14 : 6}" maxlength="50000" placeholder="e.g. We deliver across India in 3-5 working days. Free delivery on orders above Rs 999. Returns accepted within 7 days if unused..." class="${AGENT_INPUT_CLS}">${escapeHtml(kEdit ? kEdit.content : '')}</textarea>
                         <div class="flex flex-wrap items-center gap-2">
                             <button type="submit" class="${AGENT_PRIMARY_BTN}">${kEdit ? 'Save changes' : 'Add to knowledge'}</button>
                             ${kEdit ? '<button type="button" onclick="editKnowledge(null)" class="px-2 py-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white">Cancel</button>' : ''}
-                            <label class="ml-auto px-3 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-700 text-xs text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer flex items-center gap-1.5">
-                                <i data-lucide="upload" class="w-3.5 h-3.5"></i> Load from a text file
-                                <input type="file" accept=".txt,.md,.csv,text/plain" class="hidden" onchange="loadKnowledgeFile(this)">
-                            </label>
+                            ${kEdit && kEdit.file ? '<span class="text-[11px] text-zinc-500 ml-auto">Text read from the file. Correct anything the AI got wrong, then save.</span>' : ''}
                         </div>
                     </form>
                 </div>
@@ -727,19 +733,118 @@
             if (res) showToast(wasEditing ? 'Knowledge updated.' : 'Added to the knowledge base.', 'success');
         }
 
-        function loadKnowledgeFile(inputEl) {
-            const file = inputEl.files && inputEl.files[0];
-            if (!file) return;
-            if (file.size > 200000) { showToast('That file is too large. Paste the most useful parts instead (up to about 20,000 characters).', 'error'); return; }
-            const reader = new FileReader();
-            reader.onload = () => {
-                const text = String(reader.result || '');
-                document.getElementById('agent-kn-content').value = text.slice(0, 20000);
-                const t = document.getElementById('agent-kn-title');
-                if (t && !t.value) t.value = file.name.replace(/\.[^.]+$/, '');
-                if (text.length > 20000) showToast('Only the first 20,000 characters were loaded. Split long documents into several entries.', 'info');
-            };
-            reader.readAsText(file);
+        // ---------- Attach files to the knowledge base ----------
+        const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+        let agentUploads = [];        // [{id, agentId, name, status:'waiting'|'reading'|'done'|'error', message}]
+        let agentUploadRunning = false;
+
+        function formatBytes(n) {
+            n = Number(n) || 0;
+            return n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+        }
+
+        function fileIcon(name) {
+            const ext = String(name || '').split('.').pop().toLowerCase();
+            if (ext === 'pdf') return 'file-text';
+            if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return 'file-image';
+            if (['xlsx', 'xlsm', 'csv', 'tsv'].includes(ext)) return 'file-spreadsheet';
+            if (ext === 'pptx') return 'presentation';
+            return 'file';
+        }
+
+        function agentUploadsHtml(a) {
+            const mine = agentUploads.filter(u => u.agentId === a.id);
+            if (!mine.length) return '';
+            const icon = { waiting: 'clock', reading: 'loader-circle', done: 'circle-check', error: 'circle-alert' };
+            const color = { waiting: 'text-zinc-400', reading: 'text-sky-600 animate-spin', done: 'text-emerald-600', error: 'text-rose-600' };
+            const busy = mine.some(u => u.status === 'waiting' || u.status === 'reading');
+            return `<div class="rounded-lg bg-zinc-50 dark:bg-zinc-900 px-3 py-2 space-y-1.5">
+                ${mine.map(u => `<div class="flex items-start gap-2 text-xs">
+                    <i data-lucide="${icon[u.status]}" class="w-3.5 h-3.5 mt-0.5 shrink-0 ${color[u.status]}"></i>
+                    <span class="font-medium text-zinc-800 dark:text-zinc-100 truncate max-w-[40%]">${escapeHtml(u.name)}</span>
+                    <span class="text-zinc-500 flex-1 min-w-0">${escapeHtml(u.message || '')}</span>
+                </div>`).join('')}
+                ${busy ? '' : '<button onclick="clearAgentUploads()" class="text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white">Clear</button>'}
+            </div>`;
+        }
+
+        function clearAgentUploads() {
+            agentUploads = agentUploads.filter(u => u.agentId !== selectedAgentId || u.status === 'waiting' || u.status === 'reading');
+            refreshTrainTab();
+        }
+
+        function refreshTrainTab() {
+            if (activeScreen === 'agents' && agentTab === 'train') { renderAgentsList(); renderAgentDetail(); lucide.createIcons(); }
+        }
+
+        function agentDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('border-[#25D366]', 'bg-[#25D366]/5');
+        }
+        function agentDragLeave(e) {
+            e.currentTarget.classList.remove('border-[#25D366]', 'bg-[#25D366]/5');
+        }
+        function agentDrop(e) {
+            e.preventDefault();
+            agentDragLeave(e);
+            uploadKnowledgeFiles(e.dataTransfer && e.dataTransfer.files);
+        }
+
+        function uploadKnowledgeFiles(fileList) {
+            const files = Array.from(fileList || []);
+            if (!files.length || !selectedAgentId) return;
+            files.forEach(file => {
+                const u = { id: Math.random().toString(36).slice(2), agentId: selectedAgentId, name: file.name, file, status: 'waiting', message: 'Waiting…' };
+                if (file.size > MAX_UPLOAD_BYTES) Object.assign(u, { status: 'error', message: `Larger than 3 MB (${formatBytes(file.size)}). Split it or save a smaller copy.` });
+                else if (!file.size) Object.assign(u, { status: 'error', message: 'The file is empty.' });
+                agentUploads.push(u);
+            });
+            refreshTrainTab();
+            runAgentUploads();
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+                reader.onerror = () => reject(reader.error);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Upload one file at a time; the server reads each into a knowledge entry
+        async function runAgentUploads() {
+            if (agentUploadRunning) return;
+            agentUploadRunning = true;
+            try {
+                let u;
+                while ((u = agentUploads.find(x => x.status === 'waiting'))) {
+                    const slow = /\.(pdf|png|jpe?g|gif|webp)$/i.test(u.name);
+                    Object.assign(u, { status: 'reading', message: slow ? 'The AI is reading it. This can take a minute or two…' : 'Reading…' });
+                    refreshTrainTab();
+                    let r;
+                    try {
+                        const data = await fileToBase64(u.file);
+                        r = await apiFetch('/api/agents', { method: 'POST', body: JSON.stringify({
+                            action: 'uploadKnowledge', agentId: u.agentId, fileName: u.name, mimeType: u.file.type || '', data }) });
+                    } catch {
+                        r = { ok: false, json: { error: "The file couldn't be read in the browser." } };
+                    }
+                    if (r.ok && r.json && r.json.success) {
+                        if (Array.isArray(r.json.agents)) agentsList = r.json.agents;
+                        const added = r.json.added || {};
+                        Object.assign(u, { status: 'done', message: `Added as "${added.title || u.name}" (${(added.chars || 0).toLocaleString()} characters)${added.truncated ? '. It was long, so only the first part was kept; split it to add the rest' : ''}. Check it below.` });
+                    } else {
+                        Object.assign(u, { status: 'error', message: (r.json && r.json.error) || (r.status === 413 ? 'The file is too large.' : "Couldn't add this file.") });
+                    }
+                    delete u.file;
+                    refreshTrainTab();
+                }
+            } finally {
+                agentUploadRunning = false;
+            }
+            const done = agentUploads.filter(x => x.status === 'done').length;
+            if (done) showToast(`${done === 1 ? 'File' : 'Files'} added to the knowledge base. The agent uses ${done === 1 ? 'it' : 'them'} from the next message.`, 'success');
         }
 
         async function deleteKnowledge(id) {
