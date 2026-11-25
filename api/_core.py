@@ -295,9 +295,40 @@ class RedisStorage:
                 self.cmd("DEL", *keys)
 
 
+# (URL setting, token setting) name endings, in order of preference. Vercel may add a custom
+# prefix when a database is connected (e.g. STORAGE_KV_REST_API_URL), so match on the ending.
+REDIS_SETTING_PAIRS = (("UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"), ("KV_REST_API_URL", "KV_REST_API_TOKEN"))
+
+
+def find_redis_settings(env=None):
+    """Returns (url, token) from the environment, or (None, None). Unprefixed names win."""
+    env = os.environ if env is None else env
+    for url_end, token_end in REDIS_SETTING_PAIRS:
+        candidates = sorted((k for k in env if k.endswith(url_end) and env[k]), key=lambda k: (len(k), k))
+        for url_key in candidates:
+            token_key_name = url_key[:-len(url_end)] + token_end
+            if env.get(token_key_name):
+                return env[url_key], env[token_key_name]
+    return None, None
+
+
+def database_setup_problem(env=None):
+    """Explains why no database settings were found, naming (never showing) related settings."""
+    env = os.environ if env is None else env
+    related = sorted(k for k in env if any(w in k.upper() for w in ("KV_", "REDIS", "UPSTASH")))
+    msg = "The database is not connected: this deployment has no Upstash Redis REST URL and token settings."
+    if not related:
+        return msg + " In Vercel, connect an Upstash for Redis database to this project (Storage tab), then redeploy (see README.md)."
+    msg += f" Settings found: {', '.join(related[:12])}."
+    if any(k.endswith(("REDIS_URL", "KV_URL")) for k in related) and not any("REST" in k for k in related):
+        msg += " Only a redis:// connection string is set; this app needs the REST URL and token (…_KV_REST_API_URL / …_KV_REST_API_TOKEN)."
+    else:
+        msg += " Each URL setting needs a matching token setting with the same prefix (for example X_KV_REST_API_URL and X_KV_REST_API_TOKEN)."
+    return msg + " Redeploy after changing settings."
+
+
 def storage_from_env():
-    url = os.environ.get("UPSTASH_REDIS_REST_URL") or os.environ.get("KV_REST_API_URL")
-    token = os.environ.get("UPSTASH_REDIS_REST_TOKEN") or os.environ.get("KV_REST_API_TOKEN")
+    url, token = find_redis_settings()
     if not url or not token:
         return None
     return RedisStorage(url, token, os.environ.get("REDIS_PREFIX", "ebgwa"))
@@ -365,7 +396,7 @@ class Api:
     def handle(self, method, path, headers, body_bytes, client_ip, query=None):
         try:
             if self.storage is None:
-                raise ApiError(503, "The database is not connected. Add Upstash Redis to this Vercel project (see README.md).")
+                raise ApiError(503, database_setup_problem())
             token = ""
             auth = headers.get("Authorization") or headers.get("authorization") or ""
             if auth.startswith("Bearer "):

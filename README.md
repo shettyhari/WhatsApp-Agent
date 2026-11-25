@@ -60,8 +60,11 @@ WhatsApp can't reach a PC, so going live needs the Vercel setup below.
 1. Push this folder to its **own** GitHub repository and import it as a **new** Vercel project
    (Framework Preset **Other**, no build command).
 2. **Storage → Create Database → Upstash for Redis**, connected to this project for all
-   environments. (It can share the Task Assigner's database: this app keeps its data under its
-   own `ebgwa:` keys.)
+   environments. (It can share the Task Assigner's database: use **Connect Database** in this
+   project too. This app keeps its data under its own `ebgwa:` keys.) The app finds the
+   `KV_REST_API_URL` / `KV_REST_API_TOKEN` settings even if Vercel adds a custom prefix to them.
+   If you see "The database is not connected", the message lists the database settings the
+   deployment can see; settings only take effect after a redeploy.
 3. **Settings → Environment Variables:** add `ANTHROPIC_API_KEY` (create one at
    <https://platform.claude.com> → API keys).
 4. Redeploy. Open the site; the first sign-up becomes the Admin.
