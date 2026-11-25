@@ -1,8 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
   "cleanUrls": false,
   "functions": {
-    "api/index.py": { "maxDuration": 300 }
+    "api/index.py": { "maxDuration": 300, "includeFiles": "index.html" }
   },
   "rewrites": [
     { "source": "/api/:route(.*)", "destination": "/api/index?route=:route" }

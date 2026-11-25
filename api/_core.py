@@ -459,7 +459,7 @@ class Api:
             return 200, {"success": True, "users": self.user_list(data)}
         if path == "/api/agents":
             return self.agents().list(token)
-        raise ApiError(404, "Not found")
+        raise ApiError(404, f"Not found: {path}")
 
     # ---- POST --------------------------------------------------------------
     def post(self, path, token, body, client_ip):
@@ -476,7 +476,7 @@ class Api:
             return self.manage_users(body, token)
         if path == "/api/agents":
             return self.agents().action(token, body)
-        raise ApiError(404, "Not found")
+        raise ApiError(404, f"Not found: {path}")
 
     @staticmethod
     def user_list(data):

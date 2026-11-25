@@ -33,26 +33,53 @@ def client_ip(handler):
     return forwarded.split(",")[0].strip() or (handler.client_address[0] if handler.client_address else "")
 
 
+PAGE_PATHS = {"/", "/index.html"}
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def read_page():
+    """The app page, for when Vercel sends page requests to this function too."""
+    for path in (os.path.join(HERE, "..", "index.html"), os.path.join(os.getcwd(), "index.html")):
+        try:
+            with open(path, "rb") as f:
+                return f.read()
+        except OSError:
+            continue
+    return None
+
+
 class handler(BaseHTTPRequestHandler):  # Vercel looks for a class named `handler`
+    def _send(self, status, raw, ctype, cache="no-store"):
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Cache-Control", cache)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(raw)
+
     def _respond(self, method):
+        path = resolve_path(self.path)
+        # Normally Vercel serves index.html itself. Some project settings send every request
+        # here instead, so serve the page from the function as well.
+        if method == "GET" and not path.startswith("/api/"):
+            page = read_page() if path in PAGE_PATHS else None
+            if page is not None:
+                self._send(200, page, "text/html; charset=utf-8", cache="no-cache")
+            else:
+                self._send(404, f"Not found: {path}".encode("utf-8"), "text/plain; charset=utf-8")
+            return
         body = b""
         if method == "POST":
             length = int(self.headers.get("Content-Length", 0) or 0)
             body = self.rfile.read(min(length, 6 * 1024 * 1024)) if length else b""
         api = Api(storage_from_env())
-        status, payload = api.handle(method, resolve_path(self.path), self.headers, body, client_ip(self),
+        status, payload = api.handle(method, path, self.headers, body, client_ip(self),
                                      query=query_params(self.path))
         if isinstance(payload, str):  # plain-text reply (WhatsApp webhook verification)
-            raw, ctype = payload.encode("utf-8"), "text/plain; charset=utf-8"
+            self._send(status, payload.encode("utf-8"), "text/plain; charset=utf-8")
         else:
-            raw, ctype = json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8"
-        self.send_response(status)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(raw)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(raw)
+            self._send(status, json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
     def do_GET(self):
         self._respond("GET")
