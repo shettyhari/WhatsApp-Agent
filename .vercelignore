@@ -1,0 +1,9 @@
+# Never publish local data, sessions or tooling on Vercel (everything else is served as a file)
+data.json
+sessions.json
+*.tmp
+server.py
+start-server.bat
+__pycache__/
+api/__pycache__/
+README.md

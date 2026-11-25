@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EBG WhatsApp Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@1.79.0/dist/umd/lucide.min.js"></script>
+    <script>
+        tailwind.config = { darkMode: 'class', theme: { extend: { fontFamily: { sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'] } } } };
+        if (localStorage.getItem('ebgwa_theme') === 'dark') document.documentElement.classList.add('dark');
+    </script>
+    <style>
+        body { font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 3px; }
+        .widget { background: #fff; border: 1px solid #e4e4e7; border-radius: .8rem; }
+        .dark .widget { background: #18181b; border-color: #27272a; }
+        .atab { padding: .55rem 0; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+        .atab:hover { color: #18181b; }
+        .atab.active { color: #18181b; border-color: #18181b; font-weight: 500; }
+        .dark .atab:hover, .dark .atab.active { color: #fff; border-color: #fff; }
+        .topnav { padding: .4rem .75rem; border-radius: .45rem; font-size: .875rem; color: #d4d4d8; display: flex; align-items: center; gap: .45rem; }
+        .topnav:hover { background: rgba(255,255,255,.08); }
+        .topnav.active { background: rgba(255,255,255,.15); color: #fff; }
+    </style>
+</head>
+<body class="bg-white dark:bg-[#0F0F11] text-zinc-900 dark:text-zinc-100 min-h-screen">
+
+    <!-- ================= SIGN IN / FIRST-TIME SETUP ================= -->
+    <div id="auth-screen" class="hidden min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-[#0F0F11] p-4">
+        <div class="w-full max-w-sm widget p-7 shadow-sm">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center"><i data-lucide="bot-message-square" class="w-5 h-5"></i></div>
+                <div><div class="font-semibold">EBG WhatsApp Agent</div><div id="auth-subtitle" class="text-xs text-zinc-500">Sign in to continue</div></div>
+            </div>
+            <form id="auth-form" onsubmit="submitAuth(event)" class="space-y-3">
+                <div id="auth-setup-note" class="hidden text-xs text-zinc-600 dark:text-zinc-300 bg-[#25D366]/10 border border-[#25D366]/30 rounded-lg px-3 py-2">First time here: create the first account. It becomes the <b>Admin</b>, who can then add teammates.</div>
+                <input id="auth-name" class="hidden w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm outline-none focus:border-zinc-500" placeholder="Your name" autocomplete="name" maxlength="120">
+                <input id="auth-email" type="email" required class="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm outline-none focus:border-zinc-500" placeholder="Work email" autocomplete="username">
+                <input id="auth-password" type="password" required class="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm outline-none focus:border-zinc-500" placeholder="Password" autocomplete="current-password">
+                <button id="auth-submit" type="submit" class="w-full py-2 rounded-lg bg-[#111113] dark:bg-white text-white dark:text-zinc-900 text-sm font-semibold">Sign in</button>
+                <p id="auth-error" class="hidden text-xs text-rose-600"></p>
+                <p id="auth-help" class="text-[11px] text-zinc-500">No account? Ask your Admin to add you.</p>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================= APP ================= -->
+    <div id="app" class="hidden h-screen flex flex-col">
+        <header class="h-14 shrink-0 bg-[#1E1F21] text-white flex items-center gap-4 px-4">
+            <div class="flex items-center gap-2.5 font-semibold text-sm"><div class="w-8 h-8 rounded-lg bg-[#25D366] flex items-center justify-center"><i data-lucide="bot-message-square" class="w-4 h-4"></i></div><span class="hidden sm:inline">EBG WhatsApp Agent</span></div>
+            <nav class="flex items-center gap-1 ml-2">
+                <button onclick="showScreen('agents')" id="nav-agents" class="topnav"><i data-lucide="bot" class="w-4 h-4"></i> Agents</button>
+                <button onclick="showScreen('team')" id="nav-team" class="topnav hidden"><i data-lucide="users" class="w-4 h-4"></i> Team</button>
+            </nav>
+            <div class="ml-auto flex items-center gap-2">
+                <button onclick="toggleDarkMode()" class="p-2 rounded-md hover:bg-white/10 text-zinc-300" title="Light / dark"><i data-lucide="moon" class="w-4 h-4"></i></button>
+                <div class="relative">
+                    <button onclick="toggleUserMenu(event)" class="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-white/10">
+                        <span id="header-avatar" class="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold">?</span>
+                        <span class="hidden sm:block text-left leading-tight"><span id="header-name" class="block text-xs font-medium"></span><span id="header-role" class="block text-[10px] text-zinc-400"></span></span>
+                    </button>
+                    <div id="user-menu" class="hidden absolute right-0 mt-1 w-48 widget shadow-lg py-1 z-50 text-sm text-zinc-700 dark:text-zinc-200">
+                        <button onclick="openPasswordModal()" class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2"><i data-lucide="key-round" class="w-4 h-4"></i> Change password</button>
+                        <button onclick="signOut()" class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2"><i data-lucide="log-out" class="w-4 h-4"></i> Sign out</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main id="main-canvas" class="flex-1 min-h-0 overflow-y-auto">
+            <!-- AGENTS -->
+            <section id="screen-agents" class="screen">
+                <div class="px-6 lg:px-8 pt-6 pb-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-col md:flex-row md:items-center gap-3">
+                    <div class="flex-1 min-w-0">
+                        <h1 class="text-xl font-medium text-zinc-900 dark:text-white">WhatsApp agents</h1>
+                        <p class="text-xs text-zinc-500">An AI assistant for each brand that answers customers on WhatsApp, trained by your team.</p>
+                    </div>
+                    <form id="agent-create-form" onsubmit="createAgent(event)" class="hidden flex items-center gap-2">
+                        <input id="agent-new-brand" maxlength="60" placeholder="Brand name" class="px-3 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm outline-none focus:border-zinc-500">
+                        <button type="submit" class="px-3 py-1.5 rounded-md bg-[#111113] dark:bg-white text-white dark:text-zinc-900 text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Create agent</button>
+                    </form>
+                </div>
+                <div class="flex flex-col lg:flex-row min-h-[calc(100vh-150px)]">
+                    <div id="agents-list" class="lg:w-64 shrink-0 border-b lg:border-b-0 lg:border-r border-zinc-200 dark:border-zinc-800 p-3 space-y-1"></div>
+                    <div id="agent-detail" class="flex-1 min-w-0"></div>
+                </div>
+            </section>
+
+            <!-- TEAM (Admins) -->
+            <section id="screen-team" class="screen hidden px-6 lg:px-8 py-6 max-w-3xl space-y-6">
+                <div>
+                    <h1 class="text-xl font-medium text-zinc-900 dark:text-white">Team</h1>
+                    <p class="text-xs text-zinc-500">Everyone here can train agents, use the test chat and reply to customers. Admins can also create agents, connect WhatsApp and manage the team.</p>
+                </div>
+                <div id="team-list" class="widget divide-y divide-zinc-100 dark:divide-zinc-800"></div>
+                <form onsubmit="addTeammate(event)" class="widget p-5 space-y-3">
+                    <div class="text-sm font-medium">Add a teammate</div>
+                    <div class="grid sm:grid-cols-2 gap-3">
+                        <input id="team-new-name" required maxlength="120" placeholder="Name" class="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm outline-none focus:border-zinc-500">
+                        <input id="team-new-email" type="email" required placeholder="Work email" class="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm outline-none focus:border-zinc-500">
+                        <input id="team-new-password" type="text" required minlength="8" placeholder="Temporary password (8+ characters)" autocomplete="off" class="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm outline-none focus:border-zinc-500">
+                        <select id="team-new-role" class="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm outline-none"><option>Member</option><option>Admin</option></select>
+                    </div>
+                    <button type="submit" class="px-3 py-1.5 rounded-md bg-[#111113] dark:bg-white text-white dark:text-zinc-900 text-xs font-semibold">Add teammate</button>
+                    <p class="text-[11px] text-zinc-500">Share the temporary password with them privately; they can change it from the menu after signing in.</p>
+                </form>
+            </section>
+        </main>
+    </div>
+
+    <!-- Change password -->
+    <div id="password-modal" class="hidden fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+        <form onsubmit="submitPasswordChange(event)" class="w-full max-w-sm widget p-6 space-y-3 shadow-xl">
+            <div class="text-base font-medium">Change password</div>
+            <input id="pw-current" type="password" required placeholder="Current password" autocomplete="current-password" class="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm outline-none focus:border-zinc-500">
+            <input id="pw-new" type="password" required minlength="8" placeholder="New password (8+ characters)" autocomplete="new-password" class="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm outline-none focus:border-zinc-500">
+            <div class="flex justify-end gap-2 pt-1">
+                <button type="button" onclick="closePasswordModal()" class="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white">Cancel</button>
+                <button type="submit" class="px-3 py-1.5 rounded-md bg-[#111113] dark:bg-white text-white dark:text-zinc-900 text-xs font-semibold">Save</button>
+            </div>
+        </form>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-4 right-4 z-[80] space-y-2"></div>
+
+    <script>
+        // =====================================================================
+        // App shell: sign in, navigation, team
+        // =====================================================================
+        let currentUser = null;
+        let activeScreen = 'agents';
+        let teamUsers = [];
+
+        function getSessionToken() { return localStorage.getItem('ebgwa_session') || ''; }
+        function setSessionToken(token) {
+            if (token) localStorage.setItem('ebgwa_session', token);
+            else localStorage.removeItem('ebgwa_session');
+        }
+
+        async function apiFetch(path, options = {}) {
+            const headers = { ...(options.headers || {}) };
+            const token = getSessionToken();
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+            let res;
+            try {
+                res = await fetch(path, { cache: 'no-store', ...options, headers });
+            } catch {
+                return { ok: false, status: 0, json: { error: "Can't reach the server. Check your connection (or that start-server.bat is running)." } };
+            }
+            let json = null;
+            try { json = await res.json(); } catch {}
+            if (res.status === 401 && currentUser && path !== '/api/login') {
+                currentUser = null;
+                setSessionToken('');
+                showAuth();
+                showToast((json && json.error) || 'Please sign in again.', 'error');
+            }
+            return { ok: res.ok, status: res.status, json };
+        }
+
+        let authMode = 'login';
+        async function showAuth() {
+            document.getElementById('app').classList.add('hidden');
+            document.getElementById('auth-screen').classList.remove('hidden');
+            const r = await apiFetch('/api/bootstrap');
+            authMode = r.ok && r.json && !r.json.hasUsers ? 'setup' : 'login';
+            const setup = authMode === 'setup';
+            document.getElementById('auth-name').classList.toggle('hidden', !setup);
+            document.getElementById('auth-name').required = setup;
+            document.getElementById('auth-setup-note').classList.toggle('hidden', !setup);
+            document.getElementById('auth-help').classList.toggle('hidden', setup);
+            document.getElementById('auth-subtitle').textContent = setup ? 'Set up the app' : 'Sign in to continue';
+            document.getElementById('auth-submit').textContent = setup ? 'Create Admin account' : 'Sign in';
+            document.getElementById('auth-password').autocomplete = setup ? 'new-password' : 'current-password';
+            if (r.json && r.json.emailDomain) document.getElementById('auth-email').placeholder = `Work email (${r.json.emailDomain})`;
+            if (!r.ok && r.json && r.json.error) showAuthError(r.json.error);
+            lucide.createIcons();
+        }
+
+        function showAuthError(msg) {
+            const el = document.getElementById('auth-error');
+            el.textContent = msg || '';
+            el.classList.toggle('hidden', !msg);
+        }
+
+        async function submitAuth(e) {
+            e.preventDefault();
+            showAuthError('');
+            const body = {
+                email: document.getElementById('auth-email').value.trim(),
+                password: document.getElementById('auth-password').value,
+            };
+            if (authMode === 'setup') body.name = document.getElementById('auth-name').value.trim();
+            const btn = document.getElementById('auth-submit');
+            btn.disabled = true;
+            const r = await apiFetch(authMode === 'setup' ? '/api/setup' : '/api/login', { method: 'POST', body: JSON.stringify(body) });
+            btn.disabled = false;
+            if (!r.ok || !r.json || !r.json.token) { showAuthError((r.json && r.json.error) || 'Sign-in failed.'); return; }
+            setSessionToken(r.json.token);
+            document.getElementById('auth-password').value = '';
+            enterApp(r.json.user);
+        }
+
+        function enterApp(user) {
+            currentUser = user;
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('app').classList.remove('hidden');
+            const avatar = document.getElementById('header-avatar');
+            avatar.textContent = getInitials(user.name);
+            avatar.style.background = avatarColor(user.email);
+            document.getElementById('header-name').textContent = user.name;
+            document.getElementById('header-role').textContent = user.role;
+            document.getElementById('nav-team').classList.toggle('hidden', !isCurrentUserAdmin());
+            document.getElementById('agent-create-form').classList.toggle('hidden', !isCurrentUserAdmin());
+            showScreen('agents');
+        }
+
+        async function init() {
+            if (!getSessionToken()) { showAuth(); return; }
+            const r = await apiFetch('/api/me');
+            if (r.ok && r.json && r.json.user) enterApp(r.json.user);
+            else { setSessionToken(''); showAuth(); }
+        }
+
+        function isCurrentUserAdmin() { return !!(currentUser && currentUser.role === 'Admin'); }
+
+        function showScreen(screen) {
+            if (screen === 'team' && !isCurrentUserAdmin()) screen = 'agents';
+            activeScreen = screen;
+            document.querySelectorAll('.screen').forEach(el => el.classList.toggle('hidden', el.id !== `screen-${screen}`));
+            ['agents', 'team'].forEach(s => document.getElementById(`nav-${s}`).classList.toggle('active', s === screen));
+            document.getElementById('user-menu').classList.add('hidden');
+            if (screen === 'agents') openAgentsScreen();
+            if (screen === 'team') loadTeam();
+            lucide.createIcons();
+        }
+
+        function toggleUserMenu(e) {
+            e.stopPropagation();
+            document.getElementById('user-menu').classList.toggle('hidden');
+        }
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('user-menu');
+            if (menu && !menu.contains(e.target)) menu.classList.add('hidden');
+        });
+
+        function toggleDarkMode() {
+            const dark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('ebgwa_theme', dark ? 'dark' : 'light');
+        }
+
+        async function signOut() {
+            await apiFetch('/api/logout', { method: 'POST', body: '{}' });
+            setSessionToken('');
+            currentUser = null;
+            agentsList = [];
+            selectedAgentId = null;
+            showAuth();
+        }
+
+        function openPasswordModal() {
+            document.getElementById('user-menu').classList.add('hidden');
+            document.getElementById('password-modal').classList.remove('hidden');
+            document.getElementById('pw-current').focus();
+        }
+        function closePasswordModal() {
+            document.getElementById('password-modal').classList.add('hidden');
+            document.getElementById('pw-current').value = '';
+            document.getElementById('pw-new').value = '';
+        }
+        async function submitPasswordChange(e) {
+            e.preventDefault();
+            const r = await apiFetch('/api/change-password', { method: 'POST', body: JSON.stringify({
+                currentPassword: document.getElementById('pw-current').value,
+                newPassword: document.getElementById('pw-new').value }) });
+            if (!r.ok) { showToast((r.json && r.json.error) || "Couldn't change the password.", 'error'); return; }
+            closePasswordModal();
+            showToast('Password changed. Other devices have been signed out.', 'success');
+        }
+
+        // ---------- Team (Admins) ----------
+        async function loadTeam() {
+            const r = await apiFetch('/api/users');
+            if (!r.ok || !r.json) { showToast((r.json && r.json.error) || "Couldn't load the team.", 'error'); return; }
+            teamUsers = r.json.users || [];
+            renderTeam();
+        }
+
+        async function teamAction(body) {
+            const r = await apiFetch('/api/users', { method: 'POST', body: JSON.stringify(body) });
+            if (!r.ok || !r.json || r.json.success === false) {
+                showToast((r.json && r.json.error) || 'That change could not be saved.', 'error');
+                return false;
+            }
+            teamUsers = r.json.users || teamUsers;
+            renderTeam();
+            return true;
+        }
+
+        function renderTeam() {
+            const box = document.getElementById('team-list');
+            box.innerHTML = teamUsers.map(u => {
+                const me = u.email === currentUser.email;
+                return `<div class="px-5 py-3 flex items-center gap-3">
+                    <span class="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0" style="background:${avatarColor(u.email)}">${escapeHtml(getInitials(u.name))}</span>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-medium truncate">${escapeHtml(u.name)}${me ? ' <span class="text-xs text-zinc-400">(you)</span>' : ''}</div>
+                        <div class="text-xs text-zinc-500 truncate">${escapeHtml(u.email)}</div>
+                    </div>
+                    <select onchange="setTeammateRole(${jsArg(u.email)}, this.value)" class="px-2 py-1 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs">
+                        <option ${u.role === 'Member' ? 'selected' : ''}>Member</option><option ${u.role === 'Admin' ? 'selected' : ''}>Admin</option>
+                    </select>
+                    <button onclick="resetTeammatePassword(${jsArg(u.email)}, ${jsArg(u.name)})" class="p-1.5 rounded-md text-zinc-500 hover:text-indigo-600 hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Set a new password"><i data-lucide="key-round" class="w-3.5 h-3.5"></i></button>
+                    ${me ? '' : `<button onclick="removeTeammate(${jsArg(u.email)}, ${jsArg(u.name)})" class="p-1.5 rounded-md text-zinc-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950" title="Remove"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>`}
+                </div>`;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        async function addTeammate(e) {
+            e.preventDefault();
+            const ok = await teamAction({ action: 'add',
+                name: document.getElementById('team-new-name').value.trim(),
+                email: document.getElementById('team-new-email').value.trim(),
+                password: document.getElementById('team-new-password').value,
+                role: document.getElementById('team-new-role').value });
+            if (!ok) return;
+            ['team-new-name', 'team-new-email', 'team-new-password'].forEach(id => { document.getElementById(id).value = ''; });
+            showToast('Teammate added. Share their temporary password with them privately.', 'success');
+        }
+
+        async function setTeammateRole(email, role) {
+            if (!(await teamAction({ action: 'setRole', email, role }))) { renderTeam(); return; }
+            if (email === currentUser.email) { currentUser.role = role; enterApp(currentUser); }
+            showToast('Role updated.', 'success');
+        }
+
+        async function resetTeammatePassword(email, name) {
+            const password = prompt(`New password for ${name} (8+ characters). They'll be signed out everywhere:`);
+            if (password === null) return;
+            if (await teamAction({ action: 'resetPassword', email, password })) showToast('Password updated.', 'success');
+        }
+
+        async function removeTeammate(email, name) {
+            if (!confirm(`Remove ${name} (${email})? They will be signed out and can no longer use the app.`)) return;
+            if (await teamAction({ action: 'remove', email })) showToast(`${name} removed.`, 'info');
+        }
+
+        // ---------- Small helpers ----------
+        function showToast(message, type = 'info') {
+            const box = document.getElementById('toast-container');
+            const el = document.createElement('div');
+            const color = type === 'error' ? 'bg-rose-600' : type === 'success' ? 'bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900' : 'bg-zinc-800';
+            el.className = `${color} text-white text-sm px-4 py-2.5 rounded-lg shadow-lg max-w-sm`;
+            el.textContent = message;
+            box.appendChild(el);
+            setTimeout(() => el.remove(), type === 'error' ? 6000 : 3500);
+        }
+        function avatarColor(seed) {
+            const colors = ['#4573D2', '#F06A6A', '#5DA283', '#AA62E3', '#E8A93D', '#4ECBC4', '#EA4E9D', '#8D84E8'];
+            let h = 0;
+            for (const ch of String(seed || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+            return colors[h % colors.length];
+        }
+        function getInitials(name) {
+            return String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?';
+        }
+        function formatTimeAgo(iso) {
+            if (!iso) return '';
+            const sec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+            if (sec < 60) return 'Just now';
+            if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+            if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
+            return new Date(iso).toLocaleDateString();
+        }
+        function copyTextToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+            } else {
+                fallbackCopy(text);
+            }
+        }
+        function fallbackCopy(text) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch {}
+            ta.remove();
+        }
+        function jsArg(val) { return escapeHtml(JSON.stringify(String(val ?? ''))); }
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        }
+
+        // =====================================================================
+        // WHATSAPP AGENTS: one AI assistant per brand, trained by the team
+        // =====================================================================
+        let agentsList = [];
+        let selectedAgentId = null;
+        let agentTab = 'train';
+        let agentTestChats = {};      // agentId -> [{role:'customer'|'agent', text, needsHuman}]
+        let agentTestBusy = false;
+        let selectedAgentChat = null; // WhatsApp number of the open conversation
+        let editingKnowledgeId = null;
+        let editingExampleId = null;
+        let agentsRefreshTimer = null;
+        // Unsaved text in the Train forms, so saving one form doesn't wipe what's typed in another
+        let agentDrafts = {};         // "agentId:fieldId" -> text
+        const AGENT_KN_FIELDS = ['agent-kn-title', 'agent-kn-content'];
+        const AGENT_EX_FIELDS = ['agent-ex-q', 'agent-ex-a'];
+        document.addEventListener('input', (e) => {
+            const id = e.target && e.target.id;
+            if (id && selectedAgentId && /^agent-(profile-|kn-|ex-)/.test(id)) agentDrafts[`${selectedAgentId}:${id}`] = e.target.value;
+        });
+        function restoreAgentDrafts() {
+            Object.entries(agentDrafts).forEach(([key, value]) => {
+                const [agentId, id] = key.split(':');
+                const el = agentId === selectedAgentId && document.getElementById(id);
+                if (el) el.value = value;
+            });
+        }
+        function clearAgentDrafts(ids) {
+            ids.forEach(id => delete agentDrafts[`${selectedAgentId}:${id}`]);
+        }
+        const AGENT_INPUT_CLS ='w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:border-zinc-500';
+        const AGENT_PRIMARY_BTN = 'px-3 py-1.5 rounded-md bg-[#111113] dark:bg-white text-white dark:text-zinc-900 text-xs font-semibold';
+        const AGENT_PROFILE_FIELDS = [
+            { key: 'about', label: 'About the brand', rows: 4, hint: 'What the brand sells or does, who it is for, opening hours, location, website. The agent only states facts you give it.' },
+            { key: 'tone', label: 'Tone of voice', rows: 2, hint: 'e.g. Friendly and upbeat, uses emojis sparingly. Or: Formal and precise.' },
+            { key: 'language', label: 'Language', rows: 1, hint: 'e.g. Reply in the same language the customer writes in (English, Hindi, Hinglish).' },
+            { key: 'greeting', label: 'Greeting for new customers', rows: 2, hint: 'How to say hello the first time someone messages.' },
+            { key: 'rules', label: 'Rules to always follow', rows: 3, hint: 'e.g. Never promise delivery dates. Always share the store link for orders. Do not discuss competitors.' },
+            { key: 'handoff', label: 'When to hand over to a team member', rows: 3, hint: 'When this happens the agent tells the customer someone will follow up, stops replying in that chat and flags it in Conversations.' },
+        ];
+
+        function currentAgent() {
+            return agentsList.find(a => a.id === selectedAgentId) || null;
+        }
+
+        async function openAgentsScreen() {
+            if (!agentsList.length) {
+                document.getElementById('agent-detail').innerHTML = '<p class="p-10 text-sm text-zinc-500">Loading agents…</p>';
+            }
+            await loadAgents();
+            clearInterval(agentsRefreshTimer);
+            agentsRefreshTimer = setInterval(() => {
+                if (activeScreen !== 'agents' || !currentUser) { clearInterval(agentsRefreshTimer); return; }
+                if (agentTab === 'chats') loadAgents(true);
+            }, 20000);
+        }
+
+        async function loadAgents(chatsOnly = false) {
+            const r = await apiFetch('/api/agents');
+            if (!r.ok || !r.json) {
+                if (!chatsOnly) showToast((r.json && r.json.error) || "Couldn't load the WhatsApp agents.", 'error');
+                return;
+            }
+            agentsList = r.json.agents || [];
+            if (!agentsList.some(a => a.id === selectedAgentId)) selectedAgentId = agentsList[0]?.id || null;
+            if (chatsOnly) { renderAgentsList(); renderAgentChatPanels(); return; }
+            renderAgentsScreen();
+        }
+
+        // POST an agent change. Returns the response JSON, or null if it failed.
+        async function agentAction(body, { quiet = false } = {}) {
+            const r = await apiFetch('/api/agents', { method: 'POST', body: JSON.stringify(body) });
+            if (!r.ok || !r.json || r.json.success === false) {
+                showToast((r.json && r.json.error) || 'That change could not be saved.', 'error');
+                return null;
+            }
+            if (Array.isArray(r.json.agents)) agentsList = r.json.agents;
+            if (!quiet) renderAgentsScreen();
+            return r.json;
+        }
+
+        async function createAgent(e) {
+            e.preventDefault();
+            const input = document.getElementById('agent-new-brand');
+            const brand = (input?.value || '').trim();
+            if (!brand) { showToast("Type the brand's name first.", 'info'); input?.focus(); return; }
+            const before = new Set(agentsList.map(a => a.id));
+            const res = await agentAction({ action: 'create', brand }, { quiet: true });
+            if (!res) return;
+            input.value = '';
+            const created = agentsList.find(a => !before.has(a.id));
+            if (created) selectedAgentId = created.id;
+            agentTab = 'train';
+            renderAgentsScreen();
+            showToast(`Agent created for ${created ? created.brand : 'the brand'}. Start with the brand profile.`, 'success');
+        }
+
+        function agentStatus(a) {
+            if (!a.whatsapp.connected) return { label: 'Not connected', cls: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300' };
+            if (!a.enabled) return { label: 'Paused', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300' };
+            return { label: 'Live', cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' };
+        }
+
+        function renderAgentsScreen() {
+            renderAgentsList();
+            renderAgentDetail();
+            lucide.createIcons();
+        }
+
+        function renderAgentsList() {
+            const box = document.getElementById('agents-list');
+            if (!box) return;
+            box.innerHTML = agentsList.map(a => {
+                const st = agentStatus(a);
+                const waiting = (a.chats || []).filter(c => c.handoff).length;
+                return `<button onclick="selectAgent(${jsArg(a.id)})" class="w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 ${a.id === selectedAgentId ? 'bg-zinc-100 dark:bg-zinc-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-900'}">
+                    <span class="w-8 h-8 rounded-lg flex items-center justify-center text-white text-[10px] font-bold shrink-0" style="background:${avatarColor(a.brand)}">${escapeHtml(getInitials(a.brand))}</span>
+                    <span class="flex-1 min-w-0">
+                        <span class="block text-sm font-medium text-zinc-900 dark:text-white truncate">${escapeHtml(a.brand)}</span>
+                        <span class="block text-[11px] text-zinc-500 truncate">${escapeHtml(a.name)}</span>
+                    </span>
+                    <span class="flex flex-col items-end gap-1">
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${st.cls}">${st.label}</span>
+                        ${waiting ? `<span class="px-1.5 py-0.5 rounded-full bg-[#F06A6A] text-white text-[10px] font-bold" title="Chats waiting for a team member">${waiting}</span>` : ''}
+                    </span>
+                </button>`;
+            }).join('') || '<p class="px-3 py-6 text-xs text-zinc-500">No agents yet.</p>';
+        }
+
+        function selectAgent(id) {
+            selectedAgentId = id;
+            selectedAgentChat = null;
+            editingKnowledgeId = null;
+            editingExampleId = null;
+            renderAgentsScreen();
+        }
+
+        function setAgentTab(tab) {
+            agentTab = tab;
+            editingKnowledgeId = null;
+            editingExampleId = null;
+            renderAgentDetail();
+            lucide.createIcons();
+            if (tab === 'chats') loadAgents(true);
+            if (tab === 'test') document.getElementById('agent-test-input')?.focus();
+        }
+
+        function renderAgentDetail() {
+            const box = document.getElementById('agent-detail');
+            if (!box) return;
+            const a = currentAgent();
+            if (!a) {
+                box.innerHTML = `<div class="max-w-lg mx-auto text-center py-16 px-6">
+                    <div class="w-14 h-14 mx-auto rounded-2xl bg-[#25D366]/15 text-[#128C7E] flex items-center justify-center"><i data-lucide="bot-message-square" class="w-7 h-7"></i></div>
+                    <h2 class="mt-4 text-lg font-medium text-zinc-900 dark:text-white">Create your first WhatsApp agent</h2>
+                    <p class="mt-2 text-sm text-zinc-500">${isCurrentUserAdmin() ? 'Type a brand name above and click <b>Create agent</b>.' : 'Ask an Admin to create an agent for your brand.'} Then train it with the brand's details, FAQs and example replies, try it in the test chat, and connect the brand's WhatsApp Business number when you're happy with it.</p>
+                </div>`;
+                return;
+            }
+            const st = agentStatus(a);
+            const waiting = (a.chats || []).filter(c => c.handoff).length;
+            const nK = (a.knowledge || []).length, nX = (a.examples || []).length;
+            const tabs = [
+                ['train', 'Train'], ['test', 'Test chat'],
+                ['chats', `Conversations${waiting ? ` <span class="ml-1 px-1.5 rounded-full bg-[#F06A6A] text-white text-[10px] font-bold">${waiting}</span>` : ''}`],
+                ['connect', 'Connect WhatsApp'],
+            ];
+            const body = agentTab === 'train' ? agentTrainHtml(a) : agentTab === 'test' ? agentTestHtml(a)
+                : agentTab === 'chats' ? agentChatsHtml(a) : agentConnectHtml(a);
+            box.innerHTML = `
+                <div class="px-6 lg:px-8 pt-5 border-b border-zinc-200 dark:border-zinc-800">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <input id="agent-name-input" value="${escapeHtml(a.name)}" maxlength="80" onchange="renameAgent(this.value)" title="Agent name" class="text-lg font-medium bg-transparent text-zinc-900 dark:text-white outline-none border-b border-transparent hover:border-zinc-300 focus:border-zinc-500 min-w-0 flex-1">
+                        <span class="px-2 py-0.5 rounded text-[11px] font-semibold ${st.cls}">${st.label}</span>
+                        <label class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300 ${a.whatsapp.connected ? 'cursor-pointer' : 'opacity-60'}" title="${!isCurrentUserAdmin() ? 'Only an Admin can change this' : a.whatsapp.connected ? '' : 'Connect WhatsApp first'}">
+                            <input type="checkbox" ${a.enabled ? 'checked' : ''} ${a.whatsapp.connected && isCurrentUserAdmin() ? '' : 'disabled'} onchange="toggleAgentEnabled(this.checked)" class="w-4 h-4 accent-[#25D366]">
+                            Auto-reply on WhatsApp
+                        </label>
+                        ${isCurrentUserAdmin() ? '' : '<!--'}<button onclick="deleteAgent()" class="p-1.5 rounded-md text-zinc-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950" title="Delete agent"><i data-lucide="trash-2" class="w-4 h-4"></i></button>${isCurrentUserAdmin() ? '' : '-->'}
+                    </div>
+                    <div class="text-xs text-zinc-500 mt-0.5">${escapeHtml(a.brand)} · ${nK} knowledge entr${nK === 1 ? 'y' : 'ies'} · ${nX} example repl${nX === 1 ? 'y' : 'ies'}</div>
+                    <nav class="flex gap-5 mt-3 text-sm overflow-x-auto">
+                        ${tabs.map(([id, label]) => `<button onclick="setAgentTab('${id}')" class="atab ${agentTab === id ? 'active' : ''}">${label}</button>`).join('')}
+                    </nav>
+                </div>
+                <div class="px-6 lg:px-8 py-6">${body}</div>`;
+            if (agentTab === 'train') restoreAgentDrafts();
+            if (agentTab === 'test') scrollAgentThread('agent-test-thread');
+            if (agentTab === 'chats') scrollAgentThread('agent-chat-thread');
+        }
+
+        function scrollAgentThread(id) {
+            const el = document.getElementById(id);
+            if (el) el.scrollTop = el.scrollHeight;
+        }
+
+        async function renameAgent(name) {
+            name = name.trim();
+            if (!name) { renderAgentDetail(); return; }
+            if (await agentAction({ action: 'update', agentId: selectedAgentId, name }, { quiet: true })) {
+                renderAgentsList();
+                showToast('Agent name saved.', 'success');
+            }
+        }
+
+        async function toggleAgentEnabled(on) {
+            const res = await agentAction({ action: 'update', agentId: selectedAgentId, enabled: on });
+            if (res) showToast(on ? 'Auto-replies are on. The agent will answer new WhatsApp messages.' : 'Auto-replies paused. Messages still appear in Conversations.', on ? 'success' : 'info');
+            else renderAgentDetail();
+        }
+
+        async function deleteAgent() {
+            const a = currentAgent();
+            if (!a) return;
+            if (!confirm(`Delete "${a.name}" for ${a.brand}?\n\nIts training, WhatsApp connection and stored conversations are removed permanently. This can't be undone.`)) return;
+            if (await agentAction({ action: 'deleteAgent', agentId: a.id })) showToast('Agent deleted.', 'info');
+        }
+
+        // ---------- Train ----------
+        function agentTrainHtml(a) {
+            const p = a.profile || {};
+            const knowledge = a.knowledge || [];
+            const examples = a.examples || [];
+            const kEdit = knowledge.find(k => k.id === editingKnowledgeId);
+            const xEdit = examples.find(x => x.id === editingExampleId);
+            const iconBtn = (fn, id, icon, title, hover) => `<button onclick="${fn}(${jsArg(id)})" class="p-1.5 rounded-md text-zinc-500 ${hover}" title="${title}"><i data-lucide="${icon}" class="w-3.5 h-3.5"></i></button>`;
+            return `<div class="max-w-3xl space-y-8">
+                <div class="rounded-xl bg-[#25D366]/10 border border-[#25D366]/30 px-4 py-3 text-sm text-zinc-700 dark:text-zinc-200 flex gap-3">
+                    <i data-lucide="graduation-cap" class="w-5 h-5 text-[#128C7E] shrink-0 mt-0.5"></i>
+                    <div>The agent answers only from what you teach it here. <b>1.</b> Describe the brand. <b>2.</b> Add knowledge (FAQs, products, prices, policies). <b>3.</b> Add example replies. Then try it in <a href="#" onclick="setAgentTab('test'); return false;" class="underline">Test chat</a>; when a reply isn't right, correct it and the correction becomes a new example.</div>
+                </div>
+
+                <form onsubmit="saveAgentProfile(event)" class="widget p-5 space-y-4">
+                    <div class="flex items-center justify-between"><h3 class="text-base font-medium text-zinc-900 dark:text-white">1. Brand profile</h3>
+                        <button type="submit" class="${AGENT_PRIMARY_BTN}">Save profile</button></div>
+                    ${AGENT_PROFILE_FIELDS.map(f => `<label class="block">
+                        <span class="text-xs font-medium text-zinc-700 dark:text-zinc-300">${f.label}</span>
+                        <textarea id="agent-profile-${f.key}" rows="${f.rows}" maxlength="4000" class="${AGENT_INPUT_CLS} mt-1" placeholder="${escapeHtml(f.hint)}">${escapeHtml(p[f.key] || '')}</textarea>
+                    </label>`).join('')}
+                </form>
+
+                <div class="widget p-5 space-y-4">
+                    <div><h3 class="text-base font-medium text-zinc-900 dark:text-white">2. Knowledge base</h3>
+                    <p class="text-xs text-zinc-500">Paste anything customers ask about: FAQs, product list and prices, delivery, returns, offers, store addresses. One topic per entry keeps it easy to update.</p></div>
+                    <div class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                        ${knowledge.map(k => `<div class="py-2.5 flex items-start gap-3">
+                            <i data-lucide="file-text" class="w-4 h-4 text-zinc-400 mt-0.5 shrink-0"></i>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-medium text-zinc-900 dark:text-white">${escapeHtml(k.title)}</div>
+                                <div class="text-xs text-zinc-500 line-clamp-2 whitespace-pre-line">${escapeHtml(k.content.slice(0, 300))}</div>
+                            </div>
+                            ${iconBtn('editKnowledge', k.id, 'pencil', 'Edit', 'hover:text-indigo-600 hover:bg-zinc-100 dark:hover:bg-zinc-800')}
+                            ${iconBtn('deleteKnowledge', k.id, 'trash-2', 'Remove', 'hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950')}
+                        </div>`).join('') || `<p class="py-3 text-sm text-zinc-500">Nothing yet. Add the brand's FAQs or product details below.</p>`}
+                    </div>
+                    <form onsubmit="saveKnowledge(event)" class="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                        <div class="text-xs font-medium text-zinc-700 dark:text-zinc-300">${kEdit ? 'Edit entry' : 'Add an entry'}</div>
+                        <input id="agent-kn-title" maxlength="120" value="${escapeHtml(kEdit ? kEdit.title : '')}" placeholder="Topic, e.g. Delivery & returns" class="${AGENT_INPUT_CLS}">
+                        <textarea id="agent-kn-content" rows="6" maxlength="20000" placeholder="e.g. We deliver across India in 3-5 working days. Free delivery on orders above Rs 999. Returns accepted within 7 days if unused..." class="${AGENT_INPUT_CLS}">${escapeHtml(kEdit ? kEdit.content : '')}</textarea>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="submit" class="${AGENT_PRIMARY_BTN}">${kEdit ? 'Save changes' : 'Add to knowledge'}</button>
+                            ${kEdit ? '<button type="button" onclick="editKnowledge(null)" class="px-2 py-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white">Cancel</button>' : ''}
+                            <label class="ml-auto px-3 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-700 text-xs text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer flex items-center gap-1.5">
+                                <i data-lucide="upload" class="w-3.5 h-3.5"></i> Load from a text file
+                                <input type="file" accept=".txt,.md,.csv,text/plain" class="hidden" onchange="loadKnowledgeFile(this)">
+                            </label>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="widget p-5 space-y-4">
+                    <div><h3 class="text-base font-medium text-zinc-900 dark:text-white">3. Example replies</h3>
+                    <p class="text-xs text-zinc-500">Show the agent exactly how to answer common messages. It copies the style and gives the same answer to the same question.</p></div>
+                    <div class="space-y-2">
+                        ${examples.map(x => `<div class="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3 flex items-start gap-3">
+                            <div class="flex-1 min-w-0 space-y-1.5 text-sm">
+                                <div class="text-zinc-500"><span class="text-[10px] font-semibold uppercase tracking-wide text-zinc-400 mr-1">Customer</span> ${escapeHtml(x.question)}</div>
+                                <div class="text-zinc-900 dark:text-zinc-100 whitespace-pre-line"><span class="text-[10px] font-semibold uppercase tracking-wide text-[#128C7E] mr-1">Reply</span> ${escapeHtml(x.answer)}</div>
+                                ${x.source && x.source !== 'manual' ? `<div class="text-[10px] text-zinc-400">From ${x.source === 'test' ? 'the test chat' : 'a WhatsApp conversation'}${x.addedBy ? ` · ${escapeHtml(x.addedBy)}` : ''}</div>` : ''}
+                            </div>
+                            ${iconBtn('editExample', x.id, 'pencil', 'Edit', 'hover:text-indigo-600 hover:bg-zinc-100 dark:hover:bg-zinc-800')}
+                            ${iconBtn('deleteExample', x.id, 'trash-2', 'Remove', 'hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950')}
+                        </div>`).join('') || '<p class="text-sm text-zinc-500">No examples yet.</p>'}
+                    </div>
+                    <form onsubmit="saveExample(event)" class="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                        <div class="text-xs font-medium text-zinc-700 dark:text-zinc-300">${xEdit ? 'Edit example' : 'Add an example'}</div>
+                        <input id="agent-ex-q" maxlength="2000" value="${escapeHtml(xEdit ? xEdit.question : '')}" placeholder="Customer says… e.g. Do you have this in size 9?" class="${AGENT_INPUT_CLS}">
+                        <textarea id="agent-ex-a" rows="3" maxlength="4000" placeholder="The agent replies… e.g. Let me check that for you! Could you share the product name or a screenshot? 😊" class="${AGENT_INPUT_CLS}">${escapeHtml(xEdit ? xEdit.answer : '')}</textarea>
+                        <div class="flex items-center gap-2">
+                            <button type="submit" class="${AGENT_PRIMARY_BTN}">${xEdit ? 'Save changes' : 'Add example'}</button>
+                            ${xEdit ? '<button type="button" onclick="editExample(null)" class="px-2 py-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white">Cancel</button>' : ''}
+                        </div>
+                    </form>
+                </div>
+            </div>`;
+        }
+
+        async function saveAgentProfile(e) {
+            e.preventDefault();
+            const profile = {};
+            AGENT_PROFILE_FIELDS.forEach(f => { profile[f.key] = document.getElementById(`agent-profile-${f.key}`)?.value || ''; });
+            clearAgentDrafts(AGENT_PROFILE_FIELDS.map(f => `agent-profile-${f.key}`));
+            if (await agentAction({ action: 'update', agentId: selectedAgentId, profile })) showToast('Brand profile saved. The agent uses it from the next message.', 'success');
+            else AGENT_PROFILE_FIELDS.forEach(f => { agentDrafts[`${selectedAgentId}:agent-profile-${f.key}`] = profile[f.key]; });
+        }
+
+        function editKnowledge(id) {
+            clearAgentDrafts(AGENT_KN_FIELDS);
+            editingKnowledgeId = id;
+            renderAgentDetail();
+            lucide.createIcons();
+            if (id) document.getElementById('agent-kn-content')?.focus();
+        }
+
+        async function saveKnowledge(e) {
+            e.preventDefault();
+            const title = document.getElementById('agent-kn-title').value.trim();
+            const content = document.getElementById('agent-kn-content').value.trim();
+            if (!content) { showToast('Add some text for the agent to learn.', 'info'); return; }
+            const wasEditing = editingKnowledgeId;
+            editingKnowledgeId = null;
+            const res = await agentAction({ action: 'saveKnowledge', agentId: selectedAgentId, id: wasEditing || undefined, title, content }, { quiet: true });
+            if (res) clearAgentDrafts(AGENT_KN_FIELDS);
+            else editingKnowledgeId = wasEditing;
+            renderAgentsScreen();
+            if (res) showToast(wasEditing ? 'Knowledge updated.' : 'Added to the knowledge base.', 'success');
+        }
+
+        function loadKnowledgeFile(inputEl) {
+            const file = inputEl.files && inputEl.files[0];
+            if (!file) return;
+            if (file.size > 200000) { showToast('That file is too large. Paste the most useful parts instead (up to about 20,000 characters).', 'error'); return; }
+            const reader = new FileReader();
+            reader.onload = () => {
+                const text = String(reader.result || '');
+                document.getElementById('agent-kn-content').value = text.slice(0, 20000);
+                const t = document.getElementById('agent-kn-title');
+                if (t && !t.value) t.value = file.name.replace(/\.[^.]+$/, '');
+                if (text.length > 20000) showToast('Only the first 20,000 characters were loaded. Split long documents into several entries.', 'info');
+            };
+            reader.readAsText(file);
+        }
+
+        async function deleteKnowledge(id) {
+            const k = (currentAgent()?.knowledge || []).find(x => x.id === id);
+            if (!k || !confirm(`Remove "${k.title}" from the knowledge base?`)) return;
+            if (await agentAction({ action: 'deleteKnowledge', agentId: selectedAgentId, id })) showToast('Removed.', 'info');
+        }
+
+        function editExample(id) {
+            clearAgentDrafts(AGENT_EX_FIELDS);
+            editingExampleId = id;
+            renderAgentDetail();
+            lucide.createIcons();
+            if (id) document.getElementById('agent-ex-a')?.focus();
+        }
+
+        async function saveExample(e) {
+            e.preventDefault();
+            const question = document.getElementById('agent-ex-q').value.trim();
+            const answer = document.getElementById('agent-ex-a').value.trim();
+            if (!question || !answer) { showToast("Fill in both the customer's message and the reply.", 'info'); return; }
+            const wasEditing = editingExampleId;
+            editingExampleId = null;
+            const res = await agentAction({ action: 'saveExample', agentId: selectedAgentId, id: wasEditing || undefined, question, answer }, { quiet: true });
+            if (res) clearAgentDrafts(AGENT_EX_FIELDS);
+            else editingExampleId = wasEditing;
+            renderAgentsScreen();
+            if (res) showToast(wasEditing ? 'Example updated.' : 'Example added.', 'success');
+        }
+
+        async function deleteExample(id) {
+            if (!confirm('Remove this example reply?')) return;
+            if (await agentAction({ action: 'deleteExample', agentId: selectedAgentId, id })) showToast('Removed.', 'info');
+        }
+
+        // ---------- Chat bubbles (test chat and WhatsApp conversations) ----------
+        function chatBubbleHtml(m, actionsHtml = '') {
+            const mine = m.role !== 'customer';
+            const who = m.role === 'team' ? (m.by ? `${escapeHtml(m.by)} (team)` : 'Team') : m.role === 'agent' ? 'Agent' : '';
+            const bg = !mine ? 'bg-white dark:bg-zinc-800' : m.role === 'team' ? 'bg-sky-100 dark:bg-sky-900/60' : 'bg-[#D9FDD3] dark:bg-[#005C4B]';
+            return `<div class="flex ${mine ? 'justify-end' : 'justify-start'}">
+                <div class="max-w-[80%] rounded-lg px-3 py-2 text-sm shadow-sm ${bg} text-zinc-900 dark:text-zinc-100">
+                    ${who ? `<div class="text-[10px] font-semibold ${m.role === 'team' ? 'text-sky-700 dark:text-sky-300' : 'text-[#128C7E] dark:text-emerald-300'} mb-0.5">${who}</div>` : ''}<div class="whitespace-pre-line">${escapeHtml(m.text)}</div>
+                    ${m.handoff || m.needsHuman ? '<div class="mt-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1"><i data-lucide="user-round" class="w-3 h-3"></i> Handed over to the team</div>' : ''}
+                    ${m.at ? `<div class="text-[10px] text-zinc-500 dark:text-zinc-400 text-right mt-0.5">${escapeHtml(formatTimeAgo(m.at))}</div>` : ''}
+                    ${actionsHtml}
+                </div>
+            </div>`;
+        }
+
+        function improveButtonsHtml(kind, index) {
+            return `<div class="mt-1.5 pt-1.5 border-t border-black/5 dark:border-white/10 flex gap-3 text-[11px]">
+                <button onclick="openImproveReply('${kind}', ${index})" class="text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white flex items-center gap-1"><i data-lucide="pencil-line" class="w-3 h-3"></i> Correct this reply</button>
+                <button onclick="approveReply('${kind}', ${index})" class="text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white flex items-center gap-1"><i data-lucide="thumbs-up" class="w-3 h-3"></i> Good, save as example</button>
+            </div>`;
+        }
+
+        // ---------- Test chat ----------
+        function agentTestHtml(a) {
+            const msgs = agentTestChats[a.id] || [];
+            return `<div class="max-w-2xl">
+                <p class="text-xs text-zinc-500 mb-3">Chat as if you were a customer. Nothing here is sent on WhatsApp. When a reply isn't right, click <b>Correct this reply</b>: your version is saved as an example and the agent uses it straight away.</p>
+                <div class="rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800">
+                    <div class="px-4 py-2.5 bg-[#075E54] text-white flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold" style="background:${avatarColor(a.brand)}">${escapeHtml(getInitials(a.brand))}</span>
+                        <div class="flex-1 min-w-0"><div class="text-sm font-medium truncate">${escapeHtml(a.name)}</div><div class="text-[11px] text-white/70">Test chat</div></div>
+                        <button onclick="resetAgentTest()" class="text-xs text-white/80 hover:text-white flex items-center gap-1"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> New chat</button>
+                    </div>
+                    <div id="agent-test-thread" class="h-[420px] overflow-y-auto p-4 space-y-2 bg-[#EFEAE2] dark:bg-[#0B141A]">
+                        ${msgs.map((m, i) => chatBubbleHtml(m, m.role === 'agent' ? improveButtonsHtml('test', i) : '')).join('') || '<p class="text-center text-xs text-zinc-500 pt-24">Send a message to see how the agent replies.</p>'}
+                        ${agentTestBusy ? '<div class="flex"><div class="rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-500 shadow-sm">typing…</div></div>' : ''}
+                    </div>
+                    <form onsubmit="sendAgentTest(event)" class="flex items-center gap-2 p-2.5 bg-[#F0F2F5] dark:bg-[#202C33]">
+                        <input id="agent-test-input" maxlength="2000" autocomplete="off" placeholder="Type a message as a customer" ${agentTestBusy ? 'disabled' : ''} class="flex-1 px-4 py-2 rounded-full bg-white dark:bg-[#2A3942] text-sm text-zinc-900 dark:text-zinc-100 outline-none">
+                        <button type="submit" ${agentTestBusy ? 'disabled' : ''} class="w-9 h-9 rounded-full bg-[#00A884] text-white flex items-center justify-center disabled:opacity-50" title="Send"><i data-lucide="send-horizontal" class="w-4 h-4"></i></button>
+                    </form>
+                </div>
+                <div id="agent-improve-box"></div>
+            </div>`;
+        }
+
+        function resetAgentTest() {
+            agentTestChats[selectedAgentId] = [];
+            renderAgentDetail();
+            lucide.createIcons();
+        }
+
+        async function sendAgentTest(e) {
+            e.preventDefault();
+            const input = document.getElementById('agent-test-input');
+            const text = (input?.value || '').trim();
+            if (!text || agentTestBusy) return;
+            const agentId = selectedAgentId;
+            const msgs = agentTestChats[agentId] = agentTestChats[agentId] || [];
+            msgs.push({ role: 'customer', text });
+            agentTestBusy = true;
+            renderAgentDetail();
+            lucide.createIcons();
+            const r = await apiFetch('/api/agents', { method: 'POST', body: JSON.stringify({
+                action: 'test', agentId, messages: msgs.map(m => ({ role: m.role, text: m.text })) }) });
+            agentTestBusy = false;
+            const ok = r.ok && r.json && r.json.success;
+            if (ok) msgs.push({ role: 'agent', text: r.json.reply, needsHuman: !!r.json.needs_human });
+            else {
+                msgs.pop();
+                showToast((r.json && r.json.error) || "The agent couldn't reply. Try again.", 'error');
+            }
+            if (activeScreen === 'agents' && agentTab === 'test' && selectedAgentId === agentId) {
+                renderAgentDetail();
+                lucide.createIcons();
+                const box = document.getElementById('agent-test-input');
+                if (box) { if (!ok) box.value = text; box.focus(); }
+            }
+        }
+
+        // The customer message(s) an agent reply was answering, and the reply itself
+        function replyContext(kind, index) {
+            const msgs = kind === 'test' ? (agentTestChats[selectedAgentId] || [])
+                : (((currentAgent()?.chats || []).find(c => c.waId === selectedAgentChat) || {}).messages || []);
+            const reply = msgs[index];
+            if (!reply) return null;
+            const question = [];
+            for (let i = index - 1; i >= 0 && msgs[i].role === 'customer'; i--) question.unshift(msgs[i].text);
+            return { reply, question: question.join('\n') };
+        }
+
+        function openImproveReply(kind, index) {
+            const ctx = replyContext(kind, index);
+            const box = document.getElementById(kind === 'test' ? 'agent-improve-box' : 'agent-chat-improve-box');
+            if (!ctx || !box) return;
+            if (!ctx.question) { showToast('This reply has no customer message before it to learn from.', 'info'); return; }
+            box.innerHTML = `<form onsubmit="saveImprovedReply(event, '${kind}', ${index})" class="mt-4 widget p-4 space-y-2">
+                <div class="text-sm font-medium text-zinc-900 dark:text-white">Correct this reply</div>
+                <div class="text-xs text-zinc-500">Customer: <span class="text-zinc-700 dark:text-zinc-300">${escapeHtml(ctx.question)}</span></div>
+                <textarea id="agent-improve-text" rows="4" maxlength="4000" class="${AGENT_INPUT_CLS}">${escapeHtml(ctx.reply.text)}</textarea>
+                <div class="flex items-center gap-2">
+                    <button type="submit" class="${AGENT_PRIMARY_BTN}">Save &amp; teach the agent</button>
+                    <button type="button" onclick="this.closest('form').remove()" class="px-2 py-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white">Cancel</button>
+                    <span class="text-[11px] text-zinc-400 ml-auto">Saved under Train → Example replies</span>
+                </div>
+            </form>`;
+            const ta = document.getElementById('agent-improve-text');
+            ta?.focus();
+            ta?.select();
+        }
+
+        async function saveImprovedReply(e, kind, index) {
+            e.preventDefault();
+            const ctx = replyContext(kind, index);
+            const answer = (document.getElementById('agent-improve-text')?.value || '').trim();
+            if (!ctx || !answer) return;
+            const res = await agentAction({ action: 'saveExample', agentId: selectedAgentId, question: ctx.question, answer,
+                source: kind === 'test' ? 'test' : 'whatsapp' }, { quiet: true });
+            if (!res) return;
+            if (kind === 'test') ctx.reply.text = answer;
+            renderAgentsScreen();
+            showToast('Saved. The agent will answer this way from now on.', 'success');
+        }
+
+        async function approveReply(kind, index) {
+            const ctx = replyContext(kind, index);
+            if (!ctx) return;
+            if (!ctx.question) { showToast('This reply has no customer message before it to learn from.', 'info'); return; }
+            const res = await agentAction({ action: 'saveExample', agentId: selectedAgentId, question: ctx.question, answer: ctx.reply.text,
+                source: kind === 'test' ? 'test' : 'whatsapp' }, { quiet: true });
+            if (res) { renderAgentsScreen(); showToast('Saved as an example reply.', 'success'); }
+        }
+
+        // ---------- Conversations ----------
+        function agentChatsHtml(a) {
+            const chats = a.chats || [];
+            if (!chats.length) {
+                return `<div class="max-w-lg py-10 text-sm text-zinc-500">${a.whatsapp.connected
+                    ? "No WhatsApp conversations yet. When customers message the brand's number they appear here, and you can step in at any time."
+                    : `Conversations appear here once the agent is connected to WhatsApp (see <a href="#" onclick="setAgentTab('connect'); return false;" class="underline">Connect WhatsApp</a>).`}</div>`;
+            }
+            if (!chats.some(c => c.waId === selectedAgentChat)) selectedAgentChat = chats[0].waId;
+            return `<div class="flex flex-col md:flex-row gap-4">
+                <div id="agent-chat-list" class="md:w-64 shrink-0 space-y-1 max-h-[560px] overflow-y-auto">${agentChatListHtml(a)}</div>
+                <div class="flex-1 min-w-0">
+                    <div class="rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800">
+                        <div id="agent-chat-header">${agentChatHeaderHtml(a)}</div>
+                        <div id="agent-chat-thread" class="h-[420px] overflow-y-auto p-4 space-y-2 bg-[#EFEAE2] dark:bg-[#0B141A]">${agentChatThreadHtml(a)}</div>
+                        <form onsubmit="sendTeamReply(event)" class="flex items-center gap-2 p-2.5 bg-[#F0F2F5] dark:bg-[#202C33]">
+                            <input id="agent-team-input" maxlength="4000" autocomplete="off" placeholder="Reply as the team (sent on WhatsApp)" class="flex-1 px-4 py-2 rounded-full bg-white dark:bg-[#2A3942] text-sm text-zinc-900 dark:text-zinc-100 outline-none">
+                            <button type="submit" class="w-9 h-9 rounded-full bg-[#00A884] text-white flex items-center justify-center" title="Send on WhatsApp"><i data-lucide="send-horizontal" class="w-4 h-4"></i></button>
+                        </form>
+                    </div>
+                    <p class="mt-2 text-[11px] text-zinc-400">WhatsApp only allows free-form replies within 24 hours of the customer's last message.</p>
+                    <div id="agent-chat-improve-box"></div>
+                </div>
+            </div>`;
+        }
+
+        function agentChatListHtml(a) {
+            return (a.chats || []).map(c => {
+                const msgs = c.messages || [];
+                const last = msgs[msgs.length - 1] || {};
+                return `<button onclick="selectAgentChat(${jsArg(c.waId)})" class="w-full text-left px-3 py-2 rounded-lg ${c.waId === selectedAgentChat ? 'bg-zinc-100 dark:bg-zinc-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-900'}">
+                    <div class="flex items-center gap-2">
+                        <span class="flex-1 text-sm font-medium text-zinc-900 dark:text-white truncate">${escapeHtml(c.name || '+' + c.waId)}</span>
+                        <span class="text-[10px] text-zinc-400 whitespace-nowrap">${escapeHtml(formatTimeAgo(c.updatedAt))}</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        ${c.handoff ? '<span class="px-1.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[10px] font-semibold shrink-0">Needs team</span>' : ''}
+                        <span class="text-xs text-zinc-500 truncate">${escapeHtml(last.text || '')}</span>
+                    </div>
+                </button>`;
+            }).join('');
+        }
+
+        function openChat(a) {
+            return (a.chats || []).find(c => c.waId === selectedAgentChat) || null;
+        }
+
+        function agentChatHeaderHtml(a) {
+            const c = openChat(a);
+            if (!c) return '';
+            return `<div class="px-4 py-2.5 bg-[#075E54] text-white flex items-center gap-3">
+                <div class="flex-1 min-w-0"><div class="text-sm font-medium truncate">${escapeHtml(c.name || 'Customer')}</div><div class="text-[11px] text-white/70">+${escapeHtml(c.waId)}</div></div>
+                ${c.handoff
+                    ? `<span class="hidden sm:inline text-[11px] text-amber-200">Agent paused in this chat</span><button onclick="setChatHandoff(false)" class="px-2.5 py-1 rounded-md bg-white/15 hover:bg-white/25 text-xs font-medium">Hand back to agent</button>`
+                    : `<button onclick="setChatHandoff(true)" class="px-2.5 py-1 rounded-md bg-white/15 hover:bg-white/25 text-xs font-medium">Take over chat</button>`}
+            </div>`;
+        }
+
+        function agentChatThreadHtml(a) {
+            const c = openChat(a);
+            if (!c) return '';
+            return (c.messages || []).map((m, i) => chatBubbleHtml(m, m.role === 'agent' ? improveButtonsHtml('chat', i) : '')).join('');
+        }
+
+        // Refresh only the conversation parts, so a reply being typed isn't lost
+        function renderAgentChatPanels() {
+            if (activeScreen !== 'agents' || agentTab !== 'chats') return;
+            const a = currentAgent();
+            const thread = document.getElementById('agent-chat-thread');
+            if (!a || !thread || !openChat(a)) { renderAgentDetail(); lucide.createIcons(); return; }
+            const atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40;
+            document.getElementById('agent-chat-list').innerHTML = agentChatListHtml(a);
+            document.getElementById('agent-chat-header').innerHTML = agentChatHeaderHtml(a);
+            thread.innerHTML = agentChatThreadHtml(a);
+            if (atBottom) thread.scrollTop = thread.scrollHeight;
+            lucide.createIcons();
+        }
+
+        function selectAgentChat(waId) {
+            selectedAgentChat = waId;
+            renderAgentDetail();
+            lucide.createIcons();
+        }
+
+        async function setChatHandoff(handoff) {
+            if (await agentAction({ action: 'setHandoff', agentId: selectedAgentId, waId: selectedAgentChat, handoff }, { quiet: true })) {
+                renderAgentsList();
+                renderAgentChatPanels();
+                showToast(handoff ? "You've taken over. The agent won't reply in this chat until you hand it back." : 'The agent will answer this customer again.', 'info');
+            }
+        }
+
+        async function sendTeamReply(e) {
+            e.preventDefault();
+            const input = document.getElementById('agent-team-input');
+            const text = (input?.value || '').trim();
+            if (!text) return;
+            input.disabled = true;
+            const res = await agentAction({ action: 'reply', agentId: selectedAgentId, waId: selectedAgentChat, text }, { quiet: true });
+            input.disabled = false;
+            if (res) { input.value = ''; renderAgentChatPanels(); }
+            input.focus();
+        }
+
+        // ---------- Connect WhatsApp ----------
+        function agentConnectHtml(a) {
+            const wa = a.whatsapp || {};
+            const hook = `${location.origin}/api/whatsapp/webhook/${a.id}`;
+            const isLocal = location.protocol !== 'https:' || /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname);
+            const copyRow = (label, value) => `<div><div class="text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">${label}</div>
+                <div class="flex gap-2"><input readonly value="${escapeHtml(value)}" class="${AGENT_INPUT_CLS} font-mono text-xs" onclick="this.select()">
+                <button type="button" onclick="copyAgentValue(${jsArg(value)})" class="px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800" title="Copy"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button></div></div>`;
+            const field = (id, label, note, attrs) => `<label class="block"><span class="text-xs font-medium">${label}</span> <span class="text-[11px] text-zinc-500">${note}</span>
+                <input id="${id}" ${attrs} class="${AGENT_INPUT_CLS} mt-1"></label>`;
+            return `<div class="max-w-3xl space-y-6">
+                <div class="widget p-5 flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${wa.connected ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800'}"><i data-lucide="${wa.connected ? 'plug-zap' : 'plug'}" class="w-5 h-5"></i></div>
+                    <div class="flex-1 min-w-0 text-sm">
+                        <div class="font-medium text-zinc-900 dark:text-white">${wa.connected ? `Connected${wa.displayPhone ? ` to ${escapeHtml(wa.displayPhone)}` : ''}` : 'Not connected yet'}</div>
+                        <div class="text-xs text-zinc-500">${wa.lastEventAt ? `Last message received ${escapeHtml(formatTimeAgo(wa.lastEventAt))}` : wa.connected ? 'Waiting for the first WhatsApp message.' : 'Follow the steps below. You can keep training and testing in the meantime.'}</div>
+                        ${wa.lastError ? `<div class="mt-1 text-xs text-rose-600">Last problem: ${escapeHtml(wa.lastError)}</div>` : ''}
+                    </div>
+                    ${wa.connected && isCurrentUserAdmin() ? '<button onclick="disconnectAgent()" class="px-3 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-700 text-xs text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800">Disconnect</button>' : ''}
+                </div>
+                ${isLocal ? `<div class="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">You're on <b>${escapeHtml(location.host)}</b>. Meta only delivers WhatsApp messages to a public <b>https</b> address, so do this step from the team website on Vercel. Training and the test chat work here.</div>` : ''}
+                <ol class="widget p-5 space-y-5 text-sm text-zinc-700 dark:text-zinc-300 list-decimal list-inside">
+                    <li><b>Create the WhatsApp app.</b> In <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener" class="underline">Meta for Developers</a>, create a <i>Business</i> app, add the <b>WhatsApp</b> product, and add the brand's phone number under <i>WhatsApp → API Setup</i>.</li>
+                    <li><b>Point Meta at this agent.</b> In <i>WhatsApp → Configuration → Webhook</i>, click Edit and paste:
+                        <div class="mt-3 space-y-3 pl-5">${copyRow('Callback URL', hook)}${copyRow('Verify token', wa.verifyToken || '')}</div>
+                        <div class="mt-2 pl-5 text-xs text-zinc-500">Then under <i>Webhook fields</i>, subscribe to <b>messages</b>.</div></li>
+                    <li><b>Let the agent reply.</b> ${isCurrentUserAdmin() ? 'Copy these from Meta and save:' : 'An Admin enters the details from Meta here.'}
+                        <form onsubmit="connectAgent(event)" ${isCurrentUserAdmin() ? '' : 'hidden'} class="mt-3 pl-5 space-y-3">
+                            ${field('agent-wa-phone-id', 'Phone number ID', '(WhatsApp → API Setup; not the phone number itself)', `value="${escapeHtml(wa.phoneNumberId || '')}" inputmode="numeric" placeholder="e.g. 106540352242922"`)}
+                            ${field('agent-wa-display', 'Business phone number', '(shown in this app only)', `value="${escapeHtml(wa.displayPhone || '')}" placeholder="e.g. +91 98765 43210"`)}
+                            ${field('agent-wa-token', 'Permanent access token', '(Business Settings → System users → Generate token, with whatsapp_business_messaging)', `type="password" autocomplete="off" placeholder="${wa.hasAccessToken ? 'Saved. Leave blank to keep it' : 'EAAG…'}"`)}
+                            ${field('agent-wa-secret', 'App secret', '(App settings → Basic; proves messages really come from Meta)', `type="password" autocomplete="off" placeholder="${wa.hasAppSecret ? 'Saved. Leave blank to keep it' : 'App secret'}"`)}
+                            <button type="submit" class="${AGENT_PRIMARY_BTN}">Save connection</button>
+                        </form></li>
+                    <li><b>Go live.</b> Send a WhatsApp message to the number, check it appears under <i>Conversations</i>, then switch on <b>Auto-reply on WhatsApp</b> at the top.</li>
+                </ol>
+                <p class="text-xs text-zinc-500">Replies are written by Claude (Anthropic). The server needs an <code>ANTHROPIC_API_KEY</code> setting; see DEPLOY.md.</p>
+            </div>`;
+        }
+
+        function copyAgentValue(value) {
+            copyTextToClipboard(value);
+            showToast('Copied.', 'success');
+        }
+
+        async function connectAgent(e) {
+            e.preventDefault();
+            const body = {
+                action: 'connect', agentId: selectedAgentId,
+                phoneNumberId: document.getElementById('agent-wa-phone-id').value.trim(),
+                displayPhone: document.getElementById('agent-wa-display').value.trim(),
+                accessToken: document.getElementById('agent-wa-token').value.trim(),
+                appSecret: document.getElementById('agent-wa-secret').value.trim(),
+            };
+            if (!(await agentAction(body))) return;
+            const connected = !!currentAgent()?.whatsapp.connected;
+            showToast(connected ? 'WhatsApp connection saved. Send a test message to the number.' : 'Saved. Fill in the remaining fields to finish connecting.', connected ? 'success' : 'info');
+        }
+
+        async function disconnectAgent() {
+            if (!confirm('Disconnect this agent from WhatsApp? The saved token and app secret are removed and auto-replies stop. Training and conversations are kept.')) return;
+            if (await agentAction({ action: 'disconnect', agentId: selectedAgentId })) showToast('Disconnected from WhatsApp.', 'info');
+        }
+
+
+        lucide.createIcons();
+        init();
+    </script>
+</body>
+</html>
